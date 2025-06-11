@@ -188,6 +188,11 @@ class DDPG:
         self.explore_rate*=self.explore_rate_decay
         self.explore_rate=max(self.explore_rate,self.min_explore_rate)
         return actor_loss.item(),critic_loss.item()
+    def set_lr(self, actor_lr, critic_lr):
+        for param_group in self.actor_optimizer.param_groups:
+            param_group['lr'] = actor_lr
+        for param_group in self.critic_optimizer.param_groups:
+            param_group['lr'] = critic_lr
     def copy_target(self):
         self.target_actor.load_state_dict(self.actor.state_dict())
         self.target_critic.load_state_dict(self.critic.state_dict())
@@ -310,13 +315,13 @@ num_env=20
 actor_lr = 5e-4
 critic_lr=5e-4
 gamma = 0.99
-explore_rate=1.3
-explore_rate_decay=0.99995
+explore_rate=1.0
+explore_rate_decay=0.999
 min_explore_rate=0.01
 update_gap=100
 device = torch.device("cuda:2") 
 
-num_episodes = 2000000//num_env
+num_episodes = 20000//num_env
 update_iter=1
 
 # agent.load(0)
@@ -338,7 +343,7 @@ if __name__ =="__main__":
         explore_rate=0.0
         min_explore_rate=0.0
         agent = MADDPG(state_dim,hidden_dim,action_dim,num_agent,num_env,actor_lr,critic_lr,gamma,explore_rate,explore_rate_decay,min_explore_rate,update_gap,device)
-        agent.load(7)
+        agent.load(9)
         env=EnvWrapper(True)
         state=env.reset()[0]
         while True:
