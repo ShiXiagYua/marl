@@ -15,9 +15,9 @@ class EnvWrapper:
     def __init__(self,visible=False):
         self.padding=np.zeros(2)
         if visible:
-            self.env = simple_adversary_v3.parallel_env(render_mode="human",continuous_actions=True)
+            self.env = simple_adversary_v3.parallel_env(render_mode="human",continuous_actions=True,max_cycles=25)
         else:
-            self.env = simple_adversary_v3.parallel_env(continuous_actions=True)
+            self.env = simple_adversary_v3.parallel_env(continuous_actions=True,max_cycles=25)
     def process_obs(self,obs):
         obs['adversary_0']=np.concatenate([self.padding,obs['adversary_0']],axis=0)
         return obs
@@ -161,6 +161,14 @@ class SAC:
         self.explore_rate_decay=explore_rate_decay
         self.min_explore_rate=min_explore_rate
         self.entropy_coef=0.01
+    def set_lr(self, actor_lr, critic_lr):
+        for param_group in self.actor_optimizer.param_groups:
+            param_group['lr'] = actor_lr
+        for param_group in self.critic1_optimizer.param_groups:
+            param_group['lr'] = critic_lr
+        for param_group in self.critic2_optimizer.param_groups:
+            param_group['lr'] = critic_lr
+
     def take_action(self,states):
         if np.random.rand()<self.explore_rate:
             return np.random.uniform(-1,1,size=(self.num_env,self.action_dim))
@@ -234,6 +242,7 @@ class MASAC:
     def __init__(self,state_dim,hidden_dim,action_dim,num_agent,num_env,actor_lr,critic_lr,gamma,explore_rate,explore_rate_decay,min_explore_rate,update_gap,device):
         self.agents=[SAC(state_dim,hidden_dim,action_dim,agent_id,num_agent,num_env,actor_lr,critic_lr,
                     gamma,explore_rate,explore_rate_decay,min_explore_rate,update_gap,device)for agent_id in range(num_agent)]
+        self.agents[0].set_lr(actor_lr*0.2,critic_lr*0.2)
         self.num_agent=num_agent
         self.device=device
         self.build_writer()
@@ -293,8 +302,6 @@ class MASAC:
         online_next_actions=torch.cat(online_next_actions,-1)
         losses=[]
         for i in range(self.num_agent):
-            if i==0:
-                continue
             actor_loss,critic1_loss,critic2_loss=self.agents[i].update(states[:,i,:],shared_states,actions,online_actions,rewards[:,i,:],shared_next_states,online_next_actions,online_next_log_probs,dones[:,i,:])
             writer=self.writers[i]
             writer.add_scalar('actor_loss',actor_loss,i_eps)
@@ -334,7 +341,7 @@ def train_off_policy_agent(env, agent, replay,num_episodes,update_iter):
                 pbar.update(1)
         agent.save(i)
     return return_list
-min_size=2000
+min_size=5000
 max_size=1000000
 batch_size=1024
 
@@ -344,16 +351,16 @@ hidden_dim=128
 num_agent=3
 num_env=20
 
-actor_lr = 5e-4
-critic_lr=5e-4
+actor_lr = 1e-4
+critic_lr=1e-4
 gamma = 0.99
-explore_rate=1.3
-explore_rate_decay=0.99995
+explore_rate=1.0
+explore_rate_decay=0.999
 min_explore_rate=0.01
 update_gap=100
-device = torch.device("cuda:1") 
+device = torch.device("cuda:2") 
 
-num_episodes = 2000000//num_env
+num_episodes = 100000//num_env
 update_iter=1
 
 # agent.load(0)
@@ -375,12 +382,13 @@ if __name__ =="__main__":
         explore_rate=0.0
         min_explore_rate=0.0
         agent = MASAC(state_dim,hidden_dim,action_dim,num_agent,num_env,actor_lr,critic_lr,gamma,explore_rate,explore_rate_decay,min_explore_rate,update_gap,device)
-        agent.load(4)
+        agent.load(0)
         env=EnvWrapper(True)
         state=env.reset()[0]
         while True:
             action = agent.take_action([state])
             next_state, reward, done,truct, _ = env.step(action[0])
+            print(reward)
             state = next_state
             if done[0] or truct[0]:
                 break
