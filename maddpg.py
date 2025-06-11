@@ -335,6 +335,8 @@ if __name__ =="__main__":
 
         return_list = train_off_policy_agent(env, agent, replay,num_episodes,update_iter)
     else:
+        explore_rate=0.0
+        min_explore_rate=0.0
         agent = MADDPG(state_dim,hidden_dim,action_dim,num_agent,num_env,actor_lr,critic_lr,gamma,explore_rate,explore_rate_decay,min_explore_rate,update_gap,device)
         agent.load(7)
         env=EnvWrapper(True)
